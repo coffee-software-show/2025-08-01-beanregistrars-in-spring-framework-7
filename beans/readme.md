@@ -1,7 +1,8 @@
 # README
 
 * the problem: runtime iteration without a priori configuration. weve got a bunch of carts based on different locales that we want to register dynamically. 
-* **java config** - nope. wont work.
+* **java config** - nope. wont work. 
+* you could get around this by pushing the 1..N nature of the problem into the implementation itself, sort of like with `AbstractRoutingDataSource`
 * **BeanDefinitionRegistryPostProcessor**  - yah, but its super low-level. you end up having to work with it in terms of `BeanDefinition`s
 * **ApplicationContextInitializer** - higher level, but it has its own lifecycle. it doesnt exist at the same time as everything else. you cant' _inject_ such a class, even though it can furnish beans itself.
 * what about **graalvm**? 

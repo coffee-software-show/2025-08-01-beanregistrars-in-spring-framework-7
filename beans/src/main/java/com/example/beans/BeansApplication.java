@@ -23,6 +23,7 @@ import org.springframework.stereotype.Component;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @ImportRuntimeHints(BeansApplication.CartHints.class)
 @SpringBootApplication
@@ -32,7 +33,7 @@ public class BeansApplication {
 
         @Override
         public void registerHints(RuntimeHints hints, @Nullable ClassLoader classLoader) {
-            hints.reflection().registerType(Cart.class , MemberCategory.values());
+            hints.reflection().registerType(LocaleCart.class, MemberCategory.values());
         }
     }
 
@@ -60,14 +61,14 @@ class CartApplicationContextInitializer implements ApplicationContextInitializer
         if (false)
             CartLocales.LOCALES.forEach(locale -> {
                 applicationContext.registerBean("1" + locale + "ApplicationContextInitializerCart",
-                        Cart.class, () -> new Cart(locale));
+                        LocaleCart.class, () -> new LocaleCart(locale));
             });
 
 
         CartLocales.LOCALES.forEach(locale -> {
             applicationContext.registerBean("4" + locale + "ApplicationContextInitializerCart",
                     Cart.class, bd -> {
-                        bd.setBeanClassName(Cart.class.getName());
+                        bd.setBeanClassName(LocaleCart.class.getName());
                         bd.getConstructorArgumentValues().addGenericArgumentValue(locale);
                     });
         });
@@ -84,14 +85,6 @@ class CartLocales {
 
 }
 
-@Component
-class Lister {
-
-    Lister(Map<String, Cart> carts) {
-        carts.forEach((k, v) -> System.out.println(k + " " + v + ":" + v.getLocale()));
-    }
-}
-
 class CartBeanDefinitionRegistryPostProcessor implements BeanDefinitionRegistryPostProcessor {
 
     @Override
@@ -103,7 +96,7 @@ class CartBeanDefinitionRegistryPostProcessor implements BeanDefinitionRegistryP
             var beanName = "2" + locale + "BeanDefinitionCart";
             if (!registry.containsBeanDefinition(beanName))
                 registry.registerBeanDefinition(beanName,
-                        org.springframework.beans.factory.support.BeanDefinitionBuilder.genericBeanDefinition(Cart.class)
+                        org.springframework.beans.factory.support.BeanDefinitionBuilder.genericBeanDefinition(LocaleCart.class)
                                 .addConstructorArgValue(locale)
                                 .getBeanDefinition());
         });
@@ -121,21 +114,58 @@ class CartBeanRegistrar implements BeanRegistrar {
     @Override
     public void register(BeanRegistry registry, Environment env) {
         for (var locale : CartLocales.LOCALES) {
-            registry.registerBean("3" + locale + "BeanRegistrarCart", Cart.class,
-                    cartSpec -> cartSpec.supplier(_ -> new Cart(locale)));
+            registry.registerBean("3" + locale + "BeanRegistrarCart", LocaleCart.class,
+                    cartSpec -> cartSpec.supplier(_ -> new LocaleCart(locale)));
         }
     }
 }
 
-class Cart {
+@Component
+class LocaleAwareCartFacade implements Cart {
+
+    private final Map<String, Cart> carts = new ConcurrentHashMap<>();
+    static final ThreadLocal<String> LOCALE = new ThreadLocal<>();
+
+    public LocaleAwareCartFacade( ) {
+        CartLocales.LOCALES.forEach(locale -> carts.put(locale , new LocaleCart(locale)));
+    }
+
+    @Override
+    public String getLocale() {
+        var key = LOCALE.get();
+        return this.carts.get(key).getLocale();
+    }
+}
+
+@Component
+class Lister {
+
+    Lister(Map<String, LocaleCart> carts, LocaleAwareCartFacade cartFacade) {
+        carts.forEach((k, v) -> System.out.println(k + " " + v + ":" + v.getLocale()));
+
+        LocaleAwareCartFacade.LOCALE.set("es");
+        System.out.println(cartFacade.getLocale());
+        LocaleAwareCartFacade.LOCALE.set("en");
+        System.out.println(cartFacade.getLocale());
+
+    }
+}
+
+interface Cart {
+
+    String getLocale();
+}
+
+class LocaleCart implements Cart {
 
     private final String locale;
 
-    Cart(String locale) {
+    LocaleCart(String locale) {
         this.locale = locale;
     }
 
-    String getLocale() {
+    @Override
+    public String getLocale() {
         return locale;
     }
 }
